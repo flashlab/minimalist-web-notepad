@@ -38,6 +38,12 @@ location ~* ^/notes/([a-zA-Z0-9_-]+)$ {
 
 Using the command-line interface you can both save and retrieve notes. Here are some examples using `curl`:
 
+Append text to the end of note:
+
+```
+curl http://example.com/log_channel1?append=newline2
+```
+
 Retrieve a note's content and save it to a local file:
 
 ```

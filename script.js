@@ -1,43 +1,80 @@
 /*! Minimalist Web Notepad | https://github.com/pereorga/minimalist-web-notepad */
 
-function uploadContent() {
-    if (content !== textarea.value) {
-        var temp = textarea.value;
-        var request = new XMLHttpRequest();
-        request.open('POST', window.location.href, true);
-        request.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded; charset=UTF-8');
-        request.onload = function() {
-            if (request.readyState === 4) {
+// polyfill
+AbortSignal.timeout ??= function timeout(ms) {
+  const ctrl = new AbortController()
+  setTimeout(() => ctrl.abort(), ms)
+  return ctrl.signal
+}
 
-                // If the request has ended, check again after 1 second.
-                content = temp;
-                setTimeout(uploadContent, 1000);
+async function uploadContent(data) {
+    const temp = textarea.value;
+    try {
+        const resp = await fetch(window.location.href, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'
+            },
+            body: data,
+            signal: AbortSignal.timeout(6000)
+        })
+        if (!resp.ok) {
+            throw new Error(`${resp.status} ${resp.statusText}`)
+        } else {
+            const titleArr = document.title.split('|');
+            if (titleArr.length > 1) {
+                document.title = titleArr[0];
+                document.body.classList.remove('warning');
             }
+            onServer = temp;
+            document.body.classList.add('flash')
         }
-        request.onerror = function() {
-
-            // Try again after 1 second.
-            setTimeout(uploadContent, 1000);
+    } catch (error) {
+        const titleArr = document.title.split('|');
+        if (titleArr.length = 1) {
+            document.title = titleArr[0] + '| !!NETWORK ERROR!!';
+            document.body.classList.add('warning');
         }
-        request.send('text=' + encodeURIComponent(temp));
-
-        // Update the printable contents.
-        printable.removeChild(printable.firstChild);
-        printable.appendChild(document.createTextNode(temp));
-    }
-    else {
-
-        // If the content has not changed, check again after 1 second.
-        setTimeout(uploadContent, 1000);
+        console.error('Error:', error.message);
     }
 }
 
-var textarea = document.getElementById('content');
-var printable = document.getElementById('printable');
-var content = textarea.value;
+const textarea = document.getElementById('content');
+const printable = document.getElementById('printable');
+const debounce = (callback, wait) => {
+    let timeoutId = null;
+    return (...args) => {
+        window.clearTimeout(timeoutId);
+        timeoutId = window.setTimeout(() => {
+            callback(...args);
+        }, wait);
+    };
+}
+const updateTrigger = debounce(async () => {
+    if (onServer === textarea.value) return;
+    document.body.classList.remove('flash')
+    await uploadContent(new URLSearchParams({
+        'text': textarea.value
+    }))
+}, 2000);
+const toggleView = () => {
+    if (!window.markdownit) return;
+    if (!md) md = window.markdownit();
+    const isPrintView = textarea.classList.toggle('hide');
+    if (isPrintView) printable.innerHTML = md.render(textarea.value);
+    printable.classList.toggle('hide');
+}
+var onServer = textarea.value;
+var md = null;
 
-// Initialize the printable contents with the initial value of the textarea.
-printable.appendChild(document.createTextNode(content));
+if (window.location.hash == "#md") toggleView();
+
+// bind textarea update event
+textarea.addEventListener('input', updateTrigger);
+
+// bind Esc keypress event
+document.addEventListener('keyup', function(e) {
+    if (e.key === 'Escape') toggleView();
+})
 
 textarea.focus();
-uploadContent();
