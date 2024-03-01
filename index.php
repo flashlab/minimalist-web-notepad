@@ -2,10 +2,10 @@
 require_once( dirname(__FILE__).'/vendor/autoload.php' );
 use Spatie\UrlSigner\Sha256UrlSigner;
 
-require_once( dirname( dirname(__FILE__) ).'/yourls/includes/load-yourls.php' );
+require_once( dirname( dirname(__FILE__) ).'/u/includes/load-yourls.php' );
 
 // Base URL of the website, without trailing slash.
-$base_url = '';
+$base_url = "https://" . strtolower($_SERVER["HTTP_HOST"]) . (preg_match('/^\/n\//', $_SERVER["REQUEST_URI"]) ?  "/n" : "");
 
 // Path to the directory to save the notes in, without trailing slash.
 // Should be outside the document root, if possible.
@@ -26,10 +26,13 @@ $path = $save_path . '/' . $_GET['note'];
 
 // generate or validate signature.
 if (isset($_GET['signature'])) {
-    $urlSigner = new Sha256UrlSigner('randomkey');
+    $urlSigner = new Sha256UrlSigner('FHUARG5895FTGFDAGNUFDB');
     $expirationDate = (new DateTime())->modify('+1 day');
     if ($_GET['signature'] === '1') {
         yourls_maybe_require_auth();
+        if (isset($_GET['expires']) && strlen($_GET['expires']) < 4 && preg_match('/^[0-9]+$/', $_GET['expires'])) {
+            $expirationDate = (new DateTime())->modify('+'.$_GET['expires'].' day');
+        }
         header("Location: $base_url/" . preg_replace('/^\?note=(.*?)&/' , '$1?', $urlSigner->sign('?'.$_SERVER['QUERY_STRING'], $expirationDate)) . "#md");
         die;
     } else {
@@ -41,26 +44,29 @@ if (isset($_GET['signature'])) {
     yourls_maybe_require_auth();
 }
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $text = isset($_POST['text']) ? $_POST['text'] : file_get_contents("php://input");
-    // Update file.
-    file_put_contents($path, $text);
-
-    // If provided input is empty, delete file.
-    if (!strlen($text)) {
-        unlink($path);
+if ($_SERVER['REQUEST_METHOD'] === 'POST')  {
+    if (isset($_POST['readonly'])) {
+        header('HTTP/1.0 403 Forbidden');
+        die;
+    }
+    if (isset($_POST['append'])) {
+        // append file.
+        file_put_contents($path, $_POST['append'].PHP_EOL, FILE_APPEND | LOCK_EX);
+    } else {
+        $text = isset($_POST['text']) ? $_POST['text'] : file_get_contents("php://input");
+        // If provided input is empty, delete file.
+        if (!strlen($text)) {
+            unlink($path);
+        } else {
+            // Update file.
+            file_put_contents($path, $text, LOCK_EX);
+        }
     }
     die;
 }
 
-if (isset($_GET['append'])) {
-    // Update file.
-    file_put_contents($path, $_GET['append'].PHP_EOL, FILE_APPEND | LOCK_EX);
-    die;
-}
-
 // Print raw file when explicitly requested, or if the client is curl or wget.
-if (isset($_GET['raw']) || strpos($_SERVER['HTTP_USER_AGENT'], 'curl') === 0 || strpos($_SERVER['HTTP_USER_AGENT'], 'Wget') === 0) {
+if (isset($_GET['raw']) || (isset($_SERVER['HTTP_USER_AGENT']) && preg_match('/^(curl|wget)/i', $_SERVER['HTTP_USER_AGENT']))) {
     if (is_file($path)) {
         header('Content-type: text/plain');
         readfile($path);

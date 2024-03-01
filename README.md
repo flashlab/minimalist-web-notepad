@@ -41,7 +41,7 @@ Using the command-line interface you can both save and retrieve notes. Here are 
 Append text to the end of note:
 
 ```
-curl http://example.com/log_channel1?append=newline2
+curl http://example.com/log_channel1 -d 'append=newline2'
 ```
 
 Retrieve a note's content and save it to a local file:
